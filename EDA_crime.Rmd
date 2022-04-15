@@ -1,0 +1,280 @@
+---
+title: "Crime"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(viridis)
+library(cluster)
+
+```
+
+```{r}
+major_crimes <- read.csv('Major_Crime_Indicators.csv')
+```
+
+```{r}
+
+#data-preproccessing
+#this includes looking for empty data points, or duplication points
+
+major_crimes <- subset(major_crimes, !duplicated(major_crimes$event_unique_id))
+
+unique(major_crimes$occurrenceyear)
+
+unique(major_crimes$reportedyear)
+
+#crimes happened as early has 2003 but were reported as late as 2020
+
+```
+
+```{r}
+#looking at late incidents 
+
+years <- group_by(major_crimes, occurrenceyear)
+
+year_crime <- summarise(years, n= n())
+
+year_crime
+
+#19 crimes in 2019
+
+```
+
+
+
+```{r}
+useless <- c("X","Y","Index_","ucr_code", "ucr_ext","reporteddate", "reportedmonth", "reportedday","reporteddayofyear","reporteddayofweek","reportedhour","occurrencedayofyear","reportedyear","Division","Hood_ID","FID")
+
+major_crimes <- major_crimes[, !(names(major_crimes) %in% useless)]
+
+major_crimes <- major_crimes[major_crimes$occurrenceyear== 2015, ]
+
+major_crimes <- major_crimes[complete.cases(major_crimes), ]
+```
+
+
+
+```{r}
+#major crimes that occured in 2019
+
+indicators <- group_by(major_crimes, MCI)
+
+crime_indicators <- summarise(indicators, n=n())
+
+crime_indicators <- crime_indicators[order(crime_indicators$n, decreasing=TRUE), ]
+
+
+ggplot(aes(x = reorder(MCI, n), y=n), data = crime_indicators) +
+  geom_bar(stat= 'identity', width = 0.5) +
+  geom_text(aes(label=n), stat = 'identity', data = crime_indicators, hjust= -0.1, size = 2.2) +
+  coord_flip() + xlab('Major Crime Indicators') + ylab('Occurance Frequncy') + ggtitle("Major Crimes Toronto 2015") + theme_bw() + theme(plot.title = element_text(size = 16), axis.title = element_text(size = 12, face = "bold"))
+
+
+
+
+```
+
+
+```{r}
+specific_crimes <- group_by(major_crimes, offence)
+offence <- summarise(specific_crimes, n=n())
+offence <- offence[order(offence$n, decreasing = TRUE), ]
+
+ggplot(aes(x = reorder(offence, n), y=n), data = offence) +
+  geom_bar(stat= 'identity', width = 0.7) +
+  geom_text(aes(label=n), stat = 'identity', data = offence, hjust= -0.1, size = 2.2) +
+  coord_flip() + xlab('Types of Offences') + ylab('Occurance Frequncy') + ggtitle("Offence types in Toronto 2019") + theme_bw() + theme(plot.title = element_text(size = 16), axis.title = element_text(size = 12, face = "bold"))
+
+
+```
+
+
+
+```{r}
+hour <- group_by(major_crimes, occurrencehour)
+crimebyhour <- summarise(hour, n=n())
+
+ggplot(aes(x = occurrencehour, y=n), data = crimebyhour) +
+  geom_line(size = 2.5, aplha =0.7, colour= 'red', group = 1) + geom_point(size =0.5) +
+  xlab('24-Hour Clock') + ylab('Occurance Frequncy') + ggtitle("Crimes by Hour in Toronto 2019") + theme_bw() + theme(plot.title = element_text(size = 16), axis.title = element_text(size = 12, face = "bold"))
+
+```
+
+
+
+```{r}
+hour_crime_group <- group_by(major_crimes, occurrencehour, MCI)
+hour_crime <- summarise(hour_crime_group, n=n())
+
+ggplot(aes(x = occurrencehour, y=n, color=MCI), data = hour_crime) +
+  geom_line(size = 1.5) +
+  xlab('24-Hour Clock') + ylab('Occurance Frequncy') + ggtitle("Crimes types by Hour in Toronto 2019") + theme_bw() + theme(plot.title = element_text(size = 16), axis.title = element_text(size = 12, face = "bold"))
+
+
+
+
+```
+
+```{r}
+location_group <- group_by(major_crimes, Neighbourhood)
+crime_by_location <- summarise(location_group, n=n())
+crime_by_location <- crime_by_location[order(crime_by_location$n, decreasing=TRUE), ]
+
+crime_by_location_top20 <- head(crime_by_location, 20)
+
+ggplot(aes(x = reorder(Neighbourhood, n), y=n), data = crime_by_location_top20) +
+  geom_bar(stat= 'identity', width = 0.6) +
+  geom_text(aes(label=n), stat = 'identity', data = crime_by_location_top20, hjust= -0.1, size = 2.2) +
+  coord_flip() + xlab('Neighborhoods') + ylab('Occurance Frequncy') + ggtitle("Top 20 Nieghborhoods with most Crime in Toronto 2019") + theme_bw() + theme(plot.title = element_text(size = 12), axis.title = element_text(size = 11, face = "bold"))
+
+```
+
+
+```{r}
+#Safest nieghbourhoods
+tail(crime_by_location, 5)
+```
+
+
+
+```{r}
+
+crime_count <- major_crimes %>% group_by(occurrencemonth, MCI) %>%
+  
+summarise(Total = n())
+#crime_count$occurrencemonth <- ordered(crime_count$occurencemonth, levels = c("January", "February")
+```
+
+
+
+```{r}
+by_groups <- group_by(major_crimes, MCI, Neighbourhood)
+groups <- summarise(by_groups, n=n())
+groups <- groups[c("Neighbourhood", "MCI", "n")]
+groups_wide <- spread(groups, key = MCI, value= n)
+```
+```{r}
+z <- groups_wide[, -c(1,1)]
+```
+
+
+```{r}
+z <- z[complete.cases(z), ]
+
+m <- apply(z,2,mean)
+s <- apply(z,2,sd)
+z <- scale(z,m,s)
+```
+
+```{r}
+wss <- (nrow(z)-1) * sum(apply(z,2,var))
+for (i in 2:20) wss[i] <- sum(kmeans(z, centers = i)$withiness)
+plot(1:20, wss, type='b',xlab = "Number of Clusters", ylab =  "Within groups sum of sqaures")
+```
+
+
+```{r}
+
+kc <- kmeans(z,2)
+kc
+
+```
+
+```{r}
+z1 <- data.frame(z, kc$cluster)
+clusplot(z1, kc$cluster, color=TRUE, shade=F, main='k-means cluster analysis')
+
+#little noise
+```
+
+```{r}
+z2 <- data.frame(z)
+distance <- dist(z2)
+hc <- hclust(distance)
+
+```
+
+
+```{r}
+plot(hc)
+```
+
+
+```{r}
+counts = sapply(2:6, function(ncl)table(cutree(hc,ncl)))
+names(counts) = 2:6
+counts
+#stick with cluster 3
+```
+
+
+```{r}
+member <- cutree(hc,3)
+aggregate(z, list(member), mean)
+```
+```{r}
+
+plot(silhouette(cutree(hc,3), distance))
+#from this we determine we dont need 3 clusters two is enough
+```
+ 
+
+
+
+```{r}
+
+homocides <- read.csv("Homicide_ASR_RC_TBL-002(1).csv", stringsAsFactors = F)
+homocides$Occurrence_Date <- as.Date(homocides$Occurrence_Date)
+
+year_group <- group_by(homocides, Occurrence_year, Homicide_Type )
+homocide_by_year <- summarize(year_group, n=n())
+
+
+ggplot(aes(x = Occurrence_year, y =n, fill= Homicide_Type), data = homocide_by_year) +
+  geom_bar(stat='identity', position = position_dodge(), width = 0.8) + xlab("Year") + ylab("Number of Homicides")
+
+
+```
+
+
+
+```{r}
+homocides$month <- format(as.Date(homocides$Occurrence_Date), "%B")
+
+homocide_count <- homocides %>% group_by(Occurrence_year, month) %>% summarise(Total=n())
+
+homocide_count$month <- ordered(homocide_count$month, levels = c("January", 'February','March','April','May','June','July','August','September','October','November','December'))
+
+ggplot(homocide_count, aes(Occurrence_year, month, fill= Total)) + geom_tile(size =1, color= 'white') +
+  ggtitle('Homocides from 2004 to 2021') + scale_fill_viridis() + geom_text(aes(label=Total), color = 'white')
+
+``` 
+
+
+
+
+```{r}
+
+library(ggmap)
+lat <- major_crimes$Lat
+lon <- major_crimes$Long
+
+crimes <- major_crimes$MCI
+
+to_map <- data.frame(crimes, lat, lon)
+colnames(to_map) <- c('crimes','lat','lon')
+sbbox <- make_bbox(lon = major_crimes$Long, lat= major_crimes$Lat, f=0.01)
+my_map <- get_map(location= sbbox, maptype = 'roadmap', scale = 2, color = 'bw', zoom = 5)
+ggmap(my_map) + geom_point(data = my_map, aes(x=lon,y=lat), xlab('longitude'), ylab('latitude'))
+
+```
+
+
+
+
+
